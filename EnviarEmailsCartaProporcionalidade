@@ -1,0 +1,77 @@
+Sub EnviarEmailsCartaProporcionalidade()
+    ' Declara variáveis
+    Dim ExcelApp As Object, wb As Object, ws As Object
+    Dim OutlookApp As Object, EmailItem As Object
+    Dim filePath As String, destinatario As String
+    Dim i As Long
+
+    ' Solicita ao usuário para inserir manualmente o caminho da planilha
+    filePath = InputBox("Por favor, insira o caminho completo do arquivo Excel:", "Selecione a Planilha")
+    If filePath = "" Then Exit Sub ' Encerra se não foi inserido o caminho
+
+    ' Inicializa o Excel
+    Set ExcelApp = CreateObject("Excel.Application")
+    If ExcelApp Is Nothing Then
+        MsgBox "Erro ao inicializar o Excel.", vbCritical
+        Exit Sub
+    End If
+
+    ' Abre a planilha selecionada
+    Set wb = ExcelApp.Workbooks.Open(filePath)
+    If wb Is Nothing Then
+        MsgBox "Erro ao abrir a planilha.", vbCritical
+        ExcelApp.Quit
+        Exit Sub
+    End If
+
+    ' Define a primeira aba como a planilha a ser utilizada
+    Set ws = wb.Sheets(1)
+    If ws Is Nothing Then
+        MsgBox "Erro ao acessar a planilha.", vbCritical
+        wb.Close False
+        ExcelApp.Quit
+        Exit Sub
+    End If
+
+    ' Inicializa o Outlook
+    Set OutlookApp = Application
+
+    ' Loop para percorrer a coluna G e enviar e-mails
+    For i = 2 To ws.Cells(ws.Rows.Count, "G").End(-4162).Row
+        destinatario = Trim(ws.Cells(i, "G").Value)
+        
+        If destinatario <> "" And InStr(1, destinatario, "@") > 0 Then
+            ' Cria um novo e-mail
+            Set EmailItem = OutlookApp.CreateItem(0)
+            With EmailItem
+                .To = destinatario
+                .Subject = "Prazo para Envio da Carta de Proporcionalidade - 13º Salário"
+                .HTMLBody = "<p>Prezado Colaborador(a),</p>" & _
+                            "<p>Devido à <strong>ANTECIPAÇÃO DO PAGAMENTO DA FOLHA DE DÉCIMO TERCEIRO SALÁRIO</strong>, solicitamos o envio da sua <strong>Carta de Proporcionalidade</strong> até o dia <strong>09/12/2024</strong>, às <strong>16h</strong>.</p>" & _
+                            "<p>Esse prazo é necessário para garantirmos o devido lançamento das bases do seu <strong>INSS</strong>.</p>" & _
+                            "<p>Caso a carta não seja enviada até o prazo estabelecido, seguiremos com os cálculos normais e o recolhimento <strong>SEM QUALQUER TRATATIVA DE REEMBOLSO</strong>.</p>" & _
+                            "<p><strong>Lembretes importantes:</strong></p>" & _
+                            "<ul>" & _
+                            "<li>Envie sua <strong>Carta de Proporcionalidade</strong>, informando <strong>nome completo</strong> e <strong>matrícula</strong>, até <strong>09/12/2024</strong>.</li>" & _
+                            "<li>Declarações enviadas <strong>após essa data</strong> não serão consideradas.</li>" & _
+                            "</ul>" & _
+                            "<p>Utilize o e-mail: <strong>proporinss@haoc.com.br</strong></p>" & _
+                            "<p>Agradecemos pela atenção e contamos com o seu envio dentro do prazo.</p>" & _
+                            "<p>Atenciosamente,<br>Administração de Pessoal<br>Diretoria Executiva de Pessoas, Sustentabilidade e Responsabilidade Social</p>"
+                .Save
+            End With
+        End If
+    Next i
+
+    ' Fecha a planilha e o Excel
+    wb.Close False
+    ExcelApp.Quit
+
+    ' Limpeza
+    Set EmailItem = Nothing
+    Set OutlookApp = Nothing
+    Set wb = Nothing
+    Set ExcelApp = Nothing
+
+    MsgBox "Todos os e-mails foram salvos na caixa de rascunho com sucesso!", vbInformation
+End Sub
