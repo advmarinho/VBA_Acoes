@@ -1,0 +1,116 @@
+Sub ProcessEmails()
+    Dim objItem As Object, objMail As MailItem
+    Dim objExcel As Object, objWorkbook As Object, objSheet As Object
+    Dim senderEmail As String, senderName As String, emailDate As String, subject As String
+    Dim savePath As String, attachment As attachment, formattedName As String
+    Dim classificationReason As String, suggestedMatricula As String
+    Dim excelFilePath As String, lastRow As Long
+
+    ' Caminho do arquivo Excel e pasta de salvamento
+    excelFilePath = "C:\Users\mat\pasta\_RPA_AdmPessoal\_RPA_email.xlsx"
+    savePath = "C:\Users\mat\pasta\_RPA_AdmPessoal\"
+
+    ' Verificar se o item selecionado é um e-mail
+    If Application.ActiveExplorer.Selection.Count = 0 Then
+        MsgBox "Selecione um e-mail para processar."
+        Exit Sub
+    End If
+
+    ' Inicializa o Excel
+    Set objExcel = CreateObject("Excel.Application")
+    objExcel.Visible = False
+    Set objWorkbook = objExcel.Workbooks.Open(excelFilePath)
+    Set objSheet = objWorkbook.Sheets(1)
+
+    ' Loop através dos e-mails selecionados
+    For Each objItem In Application.ActiveExplorer.Selection
+        If TypeOf objItem Is MailItem Then
+            Set objMail = objItem
+
+            ' Extrair informações do e-mail
+            senderEmail = GetSmtpAddress(objMail)
+            senderName = objMail.senderName
+            emailDate = Format(objMail.SentOn, "yyyy_mm_dd")
+            subject = IIf(Trim(objMail.subject) = "", "Sem_Assunto", objMail.subject)
+
+            ' Tentar encontrar matrícula no assunto ou corpo do e-mail
+            suggestedMatricula = FindMatricula(subject)
+            If suggestedMatricula = "" Then suggestedMatricula = FindMatricula(objMail.Body)
+
+            ' Solicitar motivo de classificação com matrícula pré-preenchida, se encontrada
+            classificationReason = InputBox("Digite a matrícula ou motivo da classificação (Ex: Folha de Pagamento, RH, etc.):", "Classificação do E-mail", suggestedMatricula)
+            If Trim(classificationReason) = "" Then
+                MsgBox "Entrada inválida. A operação será cancelada.", vbExclamation
+                Exit Sub
+            End If
+
+            ' Classificar o assunto e determinar o tema
+            formattedName = CleanFileName(emailDate & "_" & senderName & "_" & GetShortSubject(subject))
+            CreateFolderIfNotExists savePath & formattedName & "\"
+
+            ' Salvar os dados na planilha
+            lastRow = objSheet.Cells(objSheet.Rows.Count, "A").End(-4162).Row + 1
+            objSheet.Cells(lastRow, 1).Value = subject
+            objSheet.Cells(lastRow, 2).Value = senderEmail
+            objSheet.Cells(lastRow, 3).Value = senderName
+            objSheet.Cells(lastRow, 4).Value = emailDate
+            objSheet.Cells(lastRow, 5).Value = "Atendimento"
+            objSheet.Cells(lastRow, 6).Value = GetTheme(GetShortSubject(subject))
+            objSheet.Cells(lastRow, 7).Value = classificationReason
+
+            ' Destacar a célula se contiver "Folha de Pagamento"
+            If InStr(classificationReason, "Folha de Pagamento") > 0 Then
+                objSheet.Cells(lastRow, 7).Interior.Color = RGB(173, 216, 230) ' Azul claro
+            End If
+
+            ' Salvar e-mails e anexos
+            SaveAttachments objMail, savePath & formattedName & "\"
+            objMail.SaveAs savePath & formattedName & "\" & formattedName & ".msg", olMSG
+
+            ' Mover e-mail para a lixeira
+            objMail.Move Application.Session.GetDefaultFolder(olFolderDeletedItems)
+        End If
+    Next objItem
+
+    ' Salvar e fechar Excel
+    objWorkbook.Save
+    objWorkbook.Close
+    objExcel.Quit
+
+    ' Limpeza
+    Set objItem = Nothing: Set objMail = Nothing
+    Set objExcel = Nothing: Set objWorkbook = Nothing: Set objSheet = Nothing
+
+    MsgBox "Processamento concluído - e-mail mapeado no Excel."
+End Sub
+
+' Função para encontrar matrícula
+Function FindMatricula(text As String) As String
+    Dim regex As Object
+    Set regex = CreateObject("VBScript.RegExp")
+    
+    ' Procurar 5 dígitos ou 4 dígitos
+    regex.Pattern = "\b\d{5}\b|\b\d{4}\b"
+    regex.Global = True
+    
+    If regex.Test(text) Then
+        FindMatricula = regex.Execute(text)(0)
+    Else
+        FindMatricula = ""
+    End If
+End Function
+
+' Função para salvar anexos
+Sub SaveAttachments(mail As MailItem, folderPath As String)
+    Dim attachment As attachment
+    For Each attachment In mail.Attachments
+        attachment.SaveAsFile folderPath & attachment.fileName
+    Next attachment
+End Sub
+
+' Função para criar pasta se não existir
+Sub CreateFolderIfNotExists(folderPath As String)
+    If Dir(folderPath, vbDirectory) = "" Then
+        MkDir folderPath
+    End If
+End Sub
