@@ -1,0 +1,117 @@
+Sub CriarEmailsComAnexos_Rascunho()
+    Dim OutApp As Object
+    Dim OutMail As Object
+    Dim OutNamespace As Object
+    Dim ws As Worksheet
+    Dim pastaSelecionada As String
+    Dim nomeArquivo As String
+    Dim caminhoArquivo As String
+    Dim emailGestor As String
+    Dim ultimaLinha As Long
+    Dim i As Long
+    Dim fso As Object
+    Dim listaArquivosAusentes As String
+    Dim arquivoNaoEncontrado As Boolean
+    Dim arquivoCompleto As String
+    
+    ' Definir a planilha ativa (Aba "Filtro")
+    Set ws = ThisWorkbook.Sheets("Filtro")
+    
+    ' Criar diálogo para selecionar a pasta com os arquivos anexos
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "Selecione a pasta com os arquivos de Banco de Horas"
+        .AllowMultiSelect = False
+        If .Show <> -1 Then
+            MsgBox "Nenhuma pasta foi selecionada. Operação cancelada.", vbExclamation
+            Exit Sub
+        End If
+        pastaSelecionada = .SelectedItems(1) & "\"
+    End With
+    
+    ' Criar uma instância do Outlook
+    On Error Resume Next
+    Set OutApp = CreateObject("Outlook.Application")
+    Set OutNamespace = OutApp.GetNamespace("MAPI") ' Acesso ao Outlook
+    On Error GoTo 0
+
+    ' Verificar se o Outlook está instalado
+    If OutApp Is Nothing Then
+        MsgBox "Erro: O Outlook não está instalado ou não pode ser aberto.", vbCritical
+        Exit Sub
+    End If
+
+    ' Encontrar a última linha preenchida na coluna F (nomes dos arquivos)
+    ultimaLinha = ws.Cells(ws.Rows.Count, "F").End(xlUp).Row
+
+    ' Criar objeto para acessar os arquivos da pasta
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    ' Inicializar a lista de arquivos ausentes
+    listaArquivosAusentes = "Os seguintes arquivos não foram encontrados na pasta selecionada:" & vbCrLf
+    arquivoNaoEncontrado = False
+
+    ' Percorrer os dados da aba "Filtro"
+    For i = 21 To ultimaLinha
+        nomeArquivo = Trim(ws.Range("F" & i).Value)
+        emailGestor = Trim(ws.Range("J" & i).Value)
+        
+        ' Verificar se há nome do arquivo e e-mail do gestor
+        If nomeArquivo <> "" And emailGestor <> "" Then
+            
+            ' Tentar identificar a extensão correta
+            If fso.FileExists(pastaSelecionada & nomeArquivo & ".xlsx") Then
+                arquivoCompleto = pastaSelecionada & nomeArquivo & ".xlsx"
+            ElseIf fso.FileExists(pastaSelecionada & nomeArquivo & ".xlsm") Then
+                arquivoCompleto = pastaSelecionada & nomeArquivo & ".xlsm"
+            ElseIf fso.FileExists(pastaSelecionada & nomeArquivo & ".xls") Then
+                arquivoCompleto = pastaSelecionada & nomeArquivo & ".xls"
+            Else
+                arquivoCompleto = "" ' Se não encontrou, mantém vazio
+            End If
+
+            ' Verificar se o arquivo foi encontrado
+            If arquivoCompleto <> "" Then
+                ' Criar um novo e-mail
+                Set OutMail = OutApp.CreateItem(0)
+
+                With OutMail
+                    .To = emailGestor
+                    .Subject = "Relatório - " & nomeArquivo ' Personaliza o assunto com o nome do arquivo
+                    .Body = "Prezado(a)," & vbCrLf & vbCrLf & _
+                            "Segue em anexo o Relatório - " & nomeArquivo & "." & vbCrLf & vbCrLf & _
+                            "Atenciosamente," & vbCrLf & _
+                            "Seu Nome"
+                    
+                    ' Anexar o arquivo com extensão corrigida
+                    .Attachments.Add arquivoCompleto
+                    
+                    ' Salvar no rascunho corretamente
+                    .Save
+                End With
+                
+                ' Pequeno atraso para garantir o salvamento
+                Application.Wait (Now + TimeValue("00:00:01"))
+                
+                ' Liberar o objeto do e-mail
+                Set OutMail = Nothing
+            Else
+                ' Adicionar à lista de arquivos ausentes
+                listaArquivosAusentes = listaArquivosAusentes & "- " & nomeArquivo & vbCrLf
+                arquivoNaoEncontrado = True
+            End If
+        End If
+    Next i
+
+    ' Liberar a instância do Outlook
+    Set OutApp = Nothing
+
+    ' Se houver arquivos ausentes, exibir a lista em tela
+    If arquivoNaoEncontrado Then
+        MsgBox listaArquivosAusentes, vbExclamation, "Arquivos Ausentes"
+    End If
+
+    ' Mensagem de confirmação
+    MsgBox "Os e-mails foram criados e salvos na pasta de rascunhos do Outlook.", vbInformation
+End Sub
+
+
