@@ -1,0 +1,61 @@
+Sub FiltrarPorDiretoriaAll()
+    Dim wsFiltro As Worksheet
+    Dim ws As Worksheet
+    Dim chefe As String
+    Dim abaIndex As Variant
+    Dim planilhas As Variant
+    Dim nomeArquivo As String
+    Dim caminhoArquivo As String
+    
+    ' Definir a planilha que contém os filtros e as planilhas a serem filtradas
+    Set wsFiltro = ThisWorkbook.Sheets(1) ' Planilha "Filtro"
+    planilhas = Array(2, 3, 4) ' Planilhas 2, 3 e 4 serão filtradas
+    
+    ' Obter o valor da célula A1 na aba "Filtro" para obter o nome da chefia
+    chefe = Trim(wsFiltro.Range("A1").Value)
+    
+    ' Verificar se o valor da célula A1 não está vazio
+    If chefe = "" Then
+        MsgBox "Erro: O valor da célula A1 está vazio. Não foi possível aplicar o filtro.", vbCritical
+        Exit Sub
+    End If
+    
+    ' Obter o valor da célula B1 na aba "Filtro" para o nome do arquivo
+    nomeArquivo = Trim(wsFiltro.Range("B1").Value)
+    
+    ' Aplicar o filtro inverso nas planilhas 2, 3 e 4
+    For Each abaIndex In planilhas
+        Set ws = ThisWorkbook.Sheets(abaIndex)
+        
+        ' Limpar qualquer filtro existente
+        If ws.AutoFilterMode Then
+            ws.AutoFilterMode = False
+        End If
+        
+        ' Garantir que o intervalo está definido corretamente
+        Dim ultimaLinha As Long
+        ultimaLinha = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row ' Considerar a Coluna A para última linha
+        
+        ' Aplicar o filtro invertido a partir da linha 33, incluindo todas as colunas
+        ws.Range("A32:W" & ultimaLinha).AutoFilter Field:=4, Criteria1:="<>" & chefe ' Field:=4 refere-se à coluna D
+    Next abaIndex
+    
+    ' Solicitar ao usuário o local para salvar o arquivo
+    If nomeArquivo <> "" Then
+        caminhoArquivo = Application.GetSaveAsFilename(InitialFileName:=nomeArquivo & ".xlsm", FileFilter:="Excel Files (*.xlsm), *.xlsm")
+        
+        ' Verificar se o usuário não cancelou a caixa de diálogo
+        If caminhoArquivo <> "False" Then
+            ThisWorkbook.SaveAs Filename:=caminhoArquivo, FileFormat:=xlOpenXMLWorkbookMacroEnabled
+            MsgBox "Planilha salva com o nome: " & caminhoArquivo, vbInformation
+        Else
+            MsgBox "Operação de salvamento cancelada pelo usuário.", vbExclamation
+        End If
+    Else
+        MsgBox "Erro: O valor da célula B1 está vazio. Não foi possível salvar a planilha.", vbCritical
+    End If
+    
+    ' Mensagem de conclusão
+    MsgBox "Filtro concluído com sucesso!", vbInformation
+End Sub
+
