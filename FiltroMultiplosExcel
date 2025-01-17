@@ -1,0 +1,94 @@
+Sub FiltrarPorGerenteA3()
+    Dim wsFiltro As Worksheet
+    Dim ws As Worksheet
+    Dim gerente As String
+    Dim nomeArquivo As String
+    Dim caminhoArquivo As String
+    Dim planilhas As Variant
+    Dim ultimaLinha As Long
+    Dim pastaAtual As String
+    Dim novoWorkbook As Workbook
+    Dim wsCopia As Worksheet
+    Dim planilhaNome As Variant
+
+    ' Definir planilha de filtro
+    Set wsFiltro = ThisWorkbook.Sheets("Filtro")
+    planilhas = Array("Banco(+)", "Banco(-)")
+
+    ' Obter o nome do gerente e o nome do arquivo
+    gerente = Trim(wsFiltro.Range("A1").Value)
+    nomeArquivo = Trim(wsFiltro.Range("B1").Value)
+
+    ' Validar entradas
+    If gerente = "" Then
+        MsgBox "Erro: O nome do gerente na célula A1 está vazio.", vbCritical
+        Exit Sub
+    End If
+
+    If nomeArquivo = "" Then
+        MsgBox "Erro: O nome do arquivo na célula B1 está vazio.", vbCritical
+        Exit Sub
+    End If
+
+    ' Melhorar desempenho desativando atualizações e cálculos automáticos
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.DisplayAlerts = False
+
+    ' Aplicar filtro invertido nas planilhas Banco(+) e Banco(-)
+    For Each planilhaNome In planilhas
+        Set ws = ThisWorkbook.Sheets(planilhaNome)
+        
+        With ws
+            ' Remover filtros existentes
+            If .AutoFilterMode Then .AutoFilterMode = False
+
+            ' Determinar última linha preenchida na coluna I
+            ultimaLinha = .Cells(.Rows.Count, "I").End(xlUp).Row
+
+            ' Aplicar filtro na coluna I (removendo o gerente específico)
+            If ultimaLinha >= 23 Then ' Garantir que há dados para filtrar
+                .Range("I23:I" & ultimaLinha).AutoFilter Field:=1, Criteria1:="<>" & gerente
+            End If
+        End With
+    Next planilhaNome
+
+    ' Obter diretório atual do arquivo
+    pastaAtual = ThisWorkbook.Path
+    If pastaAtual = "" Then
+        MsgBox "Erro: Não foi possível determinar o diretório do arquivo atual.", vbCritical
+        GoTo Finalizar
+    End If
+
+    ' Definir caminho completo do arquivo a ser salvo
+    caminhoArquivo = pastaAtual & "\" & nomeArquivo & ".xlsm"
+
+    ' Criar um novo arquivo para salvar as planilhas filtradas
+    Set novoWorkbook = Workbooks.Add(xlWBATWorksheet)
+
+    ' Copiar as planilhas desejadas para o novo workbook
+    For Each planilhaNome In Array("Filtro", "Banco(+)", "Banco(-)")
+        ThisWorkbook.Sheets(planilhaNome).Copy After:=novoWorkbook.Sheets(novoWorkbook.Sheets.Count)
+    Next planilhaNome
+
+    ' Excluir a planilha em branco que foi criada automaticamente
+    Application.DisplayAlerts = False
+    novoWorkbook.Sheets(1).Delete
+    Application.DisplayAlerts = True
+
+    ' Salvar o novo arquivo no formato .xlsm
+    novoWorkbook.SaveAs Filename:=caminhoArquivo, FileFormat:=xlOpenXMLWorkbookMacroEnabled
+
+    ' Fechar o novo arquivo
+    novoWorkbook.Close SaveChanges:=False
+
+    ' Mensagem de confirmação
+    MsgBox "Arquivo salvo com sucesso: " & caminhoArquivo, vbInformation
+
+Finalizar:
+    ' Restaurar configurações do Excel
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.DisplayAlerts = True
+End Sub
+
