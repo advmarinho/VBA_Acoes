@@ -1,0 +1,114 @@
+Sub FiltrarPorGerenteA5()
+    Dim wsFiltro As Worksheet
+    Dim ws As Worksheet
+    Dim gerente As String
+    Dim nomeArquivo As String
+    Dim caminhoArquivo As String
+    Dim planilhas As Variant
+    Dim pastaAtual As String
+    Dim novoWorkbook As Workbook
+    Dim planilhaNome As Variant
+    Dim linhaAtual As Long
+    Dim ultimaLinha As Long
+    
+    ' Definir planilha de filtro
+    Set wsFiltro = ThisWorkbook.Sheets("Filtro")
+    planilhas = Array("Banco(+)", "Banco(-)")
+
+    ' Obter diretório atual do arquivo
+    pastaAtual = ThisWorkbook.Path
+    If pastaAtual = "" Then
+        MsgBox "Erro: Não foi possível determinar o diretório do arquivo atual.", vbCritical
+        Exit Sub
+    End If
+
+    ' Melhorar desempenho desativando atualizações e cálculos automáticos
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.DisplayAlerts = False
+
+    ' Loop pelas células na coluna G e F a partir de G21 e F21
+    linhaAtual = 21
+    Do While wsFiltro.Cells(linhaAtual, 7).Value <> "" ' Coluna G
+    
+        ' Obter o nome do gerente e o nome do arquivo correspondente
+        gerente = Trim(wsFiltro.Cells(linhaAtual, 7).Value)
+        nomeArquivo = Trim(wsFiltro.Cells(linhaAtual, 6).Value) ' Coluna F
+        
+        ' Validar entradas
+        If gerente = "" Or nomeArquivo = "" Then
+            MsgBox "Erro: Nome do gerente ou do arquivo está vazio na linha " & linhaAtual, vbCritical
+            Exit Sub
+        End If
+
+        ' Definir caminho completo do arquivo a ser salvo
+        caminhoArquivo = pastaAtual & "\" & nomeArquivo & ".xlsm"
+
+        ' Criar um novo arquivo para salvar as planilhas filtradas
+        Set novoWorkbook = Workbooks.Add
+
+        ' Aplicar filtro invertido nas planilhas Banco(+) e Banco(-)
+        For Each planilhaNome In planilhas
+            Set ws = ThisWorkbook.Sheets(planilhaNome)
+            ws.Copy After:=novoWorkbook.Sheets(novoWorkbook.Sheets.Count)
+            
+            ' Definir a planilha copiada no novo arquivo
+            Set ws = novoWorkbook.Sheets(novoWorkbook.Sheets.Count)
+
+            With ws
+                ' Remover filtros existentes
+                If .AutoFilterMode Then .AutoFilterMode = False
+
+                ' Determinar última linha preenchida na coluna I
+                ultimaLinha = .Cells(.Rows.Count, "I").End(xlUp).Row
+
+                ' Aplicar filtro na coluna I (removendo o gerente específico)
+                If ultimaLinha >= 24 Then ' Garantir que há dados para filtrar
+                    .Range("I24:I" & ultimaLinha).AutoFilter Field:=1, Criteria1:="<>" & gerente
+
+                    ' Excluir as linhas visíveis (que não correspondem ao gerente)
+                    On Error Resume Next
+                    ws.Rows("24:" & ultimaLinha).SpecialCells(xlCellTypeVisible).Delete Shift:=xlUp
+                    On Error GoTo 0
+
+                    ' Remover o AutoFiltro após a exclusão
+                    .AutoFilterMode = False
+                End If
+            End With
+        Next planilhaNome
+
+        ' Copiar a planilha "Filtro" para o novo workbook (para edição temporária)
+        ThisWorkbook.Sheets("Filtro").Copy After:=novoWorkbook.Sheets(novoWorkbook.Sheets.Count)
+
+        ' Excluir a planilha "Filtro" antes de salvar
+        On Error Resume Next
+        Application.DisplayAlerts = False
+        novoWorkbook.Sheets("Filtro").Delete
+        Application.DisplayAlerts = True
+        On Error GoTo 0
+
+        ' Excluir a planilha em branco criada automaticamente
+        Application.DisplayAlerts = False
+        novoWorkbook.Sheets(1).Delete
+        Application.DisplayAlerts = True
+
+        ' Salvar o novo arquivo no formato .xlsm
+        novoWorkbook.SaveAs Filename:=caminhoArquivo, FileFormat:=xlOpenXMLWorkbookMacroEnabled
+
+        ' Fechar o novo arquivo
+        novoWorkbook.Close SaveChanges:=False
+
+        ' Avançar para a próxima linha
+        linhaAtual = linhaAtual + 1
+    Loop
+
+Finalizar:
+    ' Restaurar configurações do Excel
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.DisplayAlerts = True
+
+    ' Mensagem de confirmação
+    MsgBox "Arquivos salvos com sucesso! A aba 'Filtro' foi removida antes de salvar.", vbInformation
+End Sub
+
