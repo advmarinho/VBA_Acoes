@@ -1,0 +1,104 @@
+Sub ImportarRET_Itau()
+    Dim ws As Worksheet
+    Dim linha As String
+    Dim linhaAtual As Integer
+    Dim arquivo As String
+    Dim fileNum As Integer
+    Dim nomeBeneficiario As String, cpf As String, dataPagamento As String
+    Dim valor As Double, numeroContrato As String, cpfRepetido As String, dataFinal As String
+    Dim ultimaLinha As Integer
+    
+    ' Criar ou acessar a aba onde os dados serão inseridos
+    On Error Resume Next
+    Set ws = ThisWorkbook.Sheets("RET Consignado")
+    If ws Is Nothing Then
+        Set ws = ThisWorkbook.Sheets.Add
+        ws.Name = "RET Consignado"
+    End If
+    On Error GoTo 0
+    
+    ' Limpar a planilha antes da importação
+    ws.Cells.Clear
+    
+    ' Cabeçalhos formatados com azul petróleo
+    With ws.Range("A2:G2")
+        .Interior.Color = RGB(0, 51, 102) ' Azul petróleo
+        .Font.Color = RGB(255, 255, 255) ' Branco
+        .Font.Bold = True
+        .HorizontalAlignment = xlCenter
+    End With
+
+    ' Definir os títulos das colunas
+    ws.Cells(2, 1).Value = "Nome Beneficiário"
+    ws.Cells(2, 2).Value = "CPF"
+    ws.Cells(2, 3).Value = "Data Pagamento"
+    ws.Cells(2, 4).Value = "Valor"
+    ws.Cells(2, 5).Value = "Número Contrato"
+    ws.Cells(2, 6).Value = "CPF Repetido"
+    ws.Cells(2, 7).Value = "Data Final"
+    
+    ' Selecionar o arquivo RET ou REM
+    arquivo = Application.GetOpenFilename("Arquivos RET ou REM (*.ret;*.rem), *.ret;*.rem", , "Selecione o arquivo RET ou REM")
+    If arquivo = "False" Then Exit Sub
+    
+    fileNum = FreeFile
+    Open arquivo For Input As fileNum
+    linhaAtual = 3 ' Começar na terceira linha (segunda linha contém cabeçalhos)
+    
+    ' Processar cada linha do arquivo
+    Do While Not EOF(fileNum)
+        Line Input #fileNum, linha
+        
+        ' Aplicar o layout oficial do Itaú
+        nomeBeneficiario = Trim(Mid(linha, 21, 30))  ' Nome Beneficiário
+        cpf = Trim(Mid(linha, 60, 11))               ' CPF
+        dataPagamento = Trim(Mid(linha, 71, 8))      ' Data Pagamento
+        valor = Val(Trim(Mid(linha, 79, 18))) / 100  ' Valor (convertido para número)
+        numeroContrato = Trim(Mid(linha, 117, 34))   ' Número Contrato
+        cpfRepetido = Trim(Mid(linha, 154, 11))      ' CPF Repetido
+        dataFinal = Trim(Mid(linha, 165, 8))         ' Data Final
+        
+        ' Verificar se o CPF tem 11 dígitos e não é "0" ou "1"
+        If IsNumeric(cpf) And Len(cpf) = 11 And cpf <> "00000000000" And cpf <> "00000000001" Then
+            ' Formatar CPF como ###.###.###-##
+            cpf = Left(cpf, 3) & "." & Mid(cpf, 4, 3) & "." & Mid(cpf, 7, 3) & "-" & Right(cpf, 2)
+
+            ' Ajustar formatação da data para dd/mm/yyyy
+            If IsNumeric(dataPagamento) And Len(dataPagamento) = 8 Then
+                dataPagamento = Mid(dataPagamento, 1, 2) & "/" & Mid(dataPagamento, 3, 2) & "/" & Mid(dataPagamento, 5, 4)
+            Else
+                dataPagamento = ""
+            End If
+
+            If IsNumeric(dataFinal) And Len(dataFinal) = 8 Then
+                dataFinal = Mid(dataFinal, 1, 2) & "/" & Mid(dataFinal, 3, 2) & "/" & Mid(dataFinal, 5, 4)
+            Else
+                dataFinal = ""
+            End If
+
+            ' Inserir os dados na planilha
+            ws.Cells(linhaAtual, 1).Value = nomeBeneficiario
+            ws.Cells(linhaAtual, 2).Value = cpf
+            ws.Cells(linhaAtual, 3).Value = dataPagamento
+            ws.Cells(linhaAtual, 4).Value = valor
+            ws.Cells(linhaAtual, 5).Value = numeroContrato
+            ws.Cells(linhaAtual, 6).Value = cpfRepetido
+            ws.Cells(linhaAtual, 7).Value = dataFinal
+            
+            linhaAtual = linhaAtual + 1
+        End If
+    Loop
+    
+    Close fileNum
+    
+    ' Inserir a fórmula de subtotal na célula D1
+    ultimaLinha = ws.Cells(ws.Rows.Count, 4).End(xlUp).Row
+    If ultimaLinha >= 3 Then
+        ws.Cells(1, 4).Formula = "=SUM(D3:D" & ultimaLinha & ")"
+        ws.Cells(1, 4).Font.Bold = True
+        ws.Cells(1, 4).Interior.Color = RGB(255, 255, 153) ' Amarelo claro para destacar
+    End If
+    
+    MsgBox "Importação concluída com sucesso!", vbInformation, "Finalizado"
+End Sub
+
