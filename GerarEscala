@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gerador Escala</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    table {
+      width: 90%;
+      margin: 20px auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #007bff;
+      color: #fff;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gerador de Escala Semanal</h1>
+
+  <label for="dataInicio">Digite a primeira segunda-feira (AAAA-MM-DD):</label>
+  <input type="date" id="dataInicio" />
+
+  <button onclick="gerarEscala()">Gerar Escala</button>
+  <button onclick="copiarParaExcel()">Copiar para Excel</button>
+
+  <table id="tabelaEscala">
+    <thead>
+      <tr>
+        <th>Semana</th>
+        <th>Segunda</th>
+        <th>Terça</th>
+        <th>Quarta</th>
+        <th>Quinta</th>
+        <th>Sexta</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    // -------------------------------------------------------
+    // CONFIGURAÇÕES
+    // -------------------------------------------------------
+    const equipe = ["Marcela","Sarah","Anderson","Andreia","Fernando","Erika"];
+    // Precisamos de 18 presenças (6 x 3). Em 5 dias => [4,4,4,3,3] para 18.
+    // Erika nunca virá na segunda, mas ainda pode somar 3 presenças nos outros dias.
+    const distribuicaoDias = [4, 4, 4, 3, 3];
+    const NUM_SEMANAS = 4;
+
+    // -------------------------------------------------------
+    // FUNÇÃO PRINCIPAL
+    // -------------------------------------------------------
+    function gerarEscala() {
+      const dataInicio = document.getElementById("dataInicio").value;
+      if (!dataInicio) {
+        alert("Por favor, insira a data da primeira segunda-feira.");
+        return;
+      }
+
+      const tbody = document.querySelector("#tabelaEscala tbody");
+      tbody.innerHTML = "";
+
+      let dataSegunda = new Date(dataInicio);
+
+      for (let semana = 1; semana <= NUM_SEMANAS; semana++) {
+        // data de sexta (4 dias depois da segunda)
+        let dataSexta = new Date(dataSegunda);
+        dataSexta.setDate(dataSexta.getDate() + 4);
+
+        // gerar escala 5 dias
+        const slotsDaSemana = criarSlotsDaSemana();
+
+        // criar linha
+        let row = document.createElement("tr");
+
+        // primeira célula: semana
+        let semanaCell = document.createElement("td");
+        semanaCell.innerText = `Semana ${semana} (${formatDate(dataSegunda)} a ${formatDate(dataSexta)})`;
+        row.appendChild(semanaCell);
+
+        // colunas: segunda a sexta
+        for (let d = 0; d < 5; d++) {
+          let cell = document.createElement("td");
+          cell.innerText = slotsDaSemana[d].join(", ");
+          row.appendChild(cell);
+        }
+
+        tbody.appendChild(row);
+
+        // avança + 7 dias
+        dataSegunda.setDate(dataSegunda.getDate() + 7);
+      }
+    }
+
+    // -------------------------------------------------------
+    // CRIA ESCALA PARA UMA SEMANA
+    // -------------------------------------------------------
+    function criarSlotsDaSemana(){
+      let contadores = {};
+      equipe.forEach(nome => {
+        contadores[nome] = 0;
+      });
+
+      // slots para os 5 dias
+      let resultado = [[], [], [], [], []];
+
+      for (let dia = 0; dia < 5; dia++) {
+        let qtd = distribuicaoDias[dia];
+
+        let tentativas = 0;
+        while (resultado[dia].length < qtd && tentativas < 3000) {
+          tentativas++;
+          // sorteia
+          let candidato = equipe[Math.floor(Math.random() * equipe.length)];
+
+          // Erika não pode segunda (dia=0)
+          if (dia === 0 && candidato === "Erika") continue;
+
+          // máximo 3
+          if (contadores[candidato] >= 3) continue;
+
+          // não duplicar no dia
+          if (resultado[dia].includes(candidato)) continue;
+
+          // ok, escala
+          resultado[dia].push(candidato);
+          contadores[candidato]++;
+        }
+      }
+      return resultado;
+    }
+
+    // -------------------------------------------------------
+    // FORMATA DATA dd/mm
+    // -------------------------------------------------------
+    function formatDate(dt) {
+      let d = dt.getDate().toString().padStart(2, "0");
+      let m = (dt.getMonth() + 1).toString().padStart(2, "0");
+      return `${d}/${m}`;
+    }
+
+    // -------------------------------------------------------
+    // COPIAR P/ EXCEL
+    // -------------------------------------------------------
+    function copiarParaExcel() {
+      let tabela = document.getElementById("tabelaEscala");
+      let range = document.createRange();
+      range.selectNode(tabela);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      document.execCommand("copy");
+      alert("Tabela copiada! Cole no Excel.");
+    }
+  </script>
+</body>
+</html>
