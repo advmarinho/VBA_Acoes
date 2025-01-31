@@ -1,0 +1,75 @@
+Sub Macro1_Otimizada()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    Dim rngVisible As Range
+    Dim arrA() As Variant, arrB() As Variant
+    Dim i As Long, total As Long
+    
+    Set ws = ActiveSheet
+    
+    ' Encontrar a última linha com dados na coluna H
+    lastRow = ws.Cells(ws.Rows.Count, "H").End(xlUp).Row
+
+    ' Remove filtros anteriores, se houver
+    If ws.AutoFilterMode Then ws.AutoFilterMode = False
+    
+    ' Define o tamanho da fonte e cor nas colunas A:O
+    With ws.Columns("A:O").Font
+        .Size = 8
+        .Color = -16777216
+    End With
+
+    ' Inserir duas colunas no início da planilha
+    ws.Columns("A:B").Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+
+    ' Adiciona fórmula nas células A8 e B8
+    ws.Range("A8").FormulaR1C1 = "=RC[2]"
+    ws.Range("B8").FormulaR1C1 = "=RC[2]"
+
+    ' Aplicar AutoFilter em A:M
+    ws.Range("A:M").AutoFilter
+
+    ' Filtrar apenas números na coluna H (removendo vazios)
+    ws.Range("A:M").AutoFilter Field:=8, Criteria1:=">=0", Operator:=xlAnd
+    ws.Range("A:M").AutoFilter Field:=8, Criteria1:="<>"
+
+    ' Filtrar a coluna C para remover vazios
+    ws.Range("A:M").AutoFilter Field:=3, Criteria1:="<>"
+
+    ' Encontrar células visíveis na coluna A após filtragem
+    On Error Resume Next
+    Set rngVisible = ws.Range("A9:A" & lastRow).SpecialCells(xlCellTypeVisible)
+    On Error GoTo 0
+
+    ' Se houver células visíveis, copiar fórmulas rapidamente
+    If Not rngVisible Is Nothing Then
+        total = rngVisible.Cells.Count
+        ReDim arrA(1 To total)
+        ReDim arrB(1 To total)
+        
+        ' Atualizar a barra de progresso
+        Application.StatusBar = "Aplicando fórmulas... 0% concluído"
+        
+        ' Preencher arrays com fórmulas para maior velocidade
+        For i = 1 To total
+            arrA(i) = "=RC[2]"
+            arrB(i) = "=RC[2]"
+            
+            ' Atualiza a barra de progresso a cada 10% de progresso
+            If (i Mod (total \ 10 + 1) = 0) Then
+                Application.StatusBar = "Aplicando fórmulas... " & Format(i / total, "0%") & " concluído"
+            End If
+        Next i
+
+        ' Preenche os valores das colunas A e B de uma só vez
+        rngVisible.Value = arrA
+        rngVisible.Offset(0, 1).Value = arrB
+    End If
+
+    ' Restaurar a barra de status
+    Application.StatusBar = "Concluído!"
+
+    ' Limpar objetos
+    Set rngVisible = Nothing
+    
+End Sub
