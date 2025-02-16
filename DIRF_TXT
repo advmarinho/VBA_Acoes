@@ -1,0 +1,202 @@
+Option Explicit
+
+Sub Importar_DIRF_Importador()
+    Dim arqDIRF As Variant
+    Dim wsDIRF As Worksheet
+    Dim linhaDIRF As Long
+    Dim texto As String, campos() As String
+    Dim currentCPF As String
+    Dim dict As Object, dictAbono As Object, dict13 As Object
+    Dim i As Long, j As Long
+    Dim dados() As Variant
+    Dim chave As Variant
+    Dim valor As Double
+    Dim flagInfpc As Boolean
+    Dim lastIndex As Long
+    
+    ' Inicializações
+    currentCPF = ""
+    flagInfpc = False
+    Set dict = CreateObject("Scripting.Dictionary")
+    Set dictAbono = CreateObject("Scripting.Dictionary")
+    Set dict13 = CreateObject("Scripting.Dictionary")
+    
+    ' Seleciona o arquivo TXT (DIRF)
+    arqDIRF = Application.GetOpenFilename("Arquivos de Texto (*.txt), *.txt", , "Selecione o arquivo DIRF")
+    If arqDIRF = False Then Exit Sub
+    
+    ' Cria ou limpa a planilha "DIRF_Import"
+    On Error Resume Next
+    Set wsDIRF = ThisWorkbook.Sheets("DIRF_Import")
+    If wsDIRF Is Nothing Then
+        Set wsDIRF = ThisWorkbook.Sheets.Add
+        wsDIRF.Name = "DIRF_Import"
+    Else
+        wsDIRF.Cells.Clear
+    End If
+    On Error GoTo 0
+    
+    ' Define o cabeçalho
+    ' Colunas: A=CPF, B=Rendimento Tributável, C=Previdência Oficial, D=Previdência Complementar,
+    ' E=Dependentes, F=Pensão, G=Imposto Retido, H=Previdência Privada, I=Plano Saúde, J=Plano Odonto,
+    ' K=Abono, L=13º Salário
+    wsDIRF.Range("A1:L1").Value = Array("CPF", "Rendimento Tributável", "Previdência Oficial", "Previdência Complementar", _
+                                         "Dependentes", "Pensão", "Imposto Retido", "Previdência Privada", "Plano Saúde", _
+                                         "Plano Odonto", "Abono", "13º Salário")
+    
+    ' Abre o arquivo TXT para leitura
+    Open arqDIRF For Input As #1
+    Do Until EOF(1)
+        Line Input #1, texto
+        texto = Trim(Replace(texto, vbTab, ""))
+        campos = Split(texto, "|")
+        
+        ' Verifica se a linha contém pelo menos um código válido
+        If UBound(campos) >= 0 Then
+            Select Case campos(0)
+                Case "BPFDEC"
+                    ' Define o CPF corrente e inicializa os registros
+                    currentCPF = Trim(campos(1))
+                    If Not dict.Exists(currentCPF) Then
+                        ' Cria um array com 9 posições para os campos do dicionário:
+                        ' 0: Rendimento Tributável
+                        ' 1: Previdência Oficial
+                        ' 2: Previdência Complementar
+                        ' 3: Dependentes ou Pensão
+                        ' 4: (campo reservado)
+                        ' 5: Imposto Retido
+                        ' 6: Previdência Privada
+                        ' 7: Plano Saúde
+                        ' 8: Plano Odonto
+                        dict.Add currentCPF, Array(0, 0, 0, 0, 0, 0, 0, 0, 0)
+                        dictAbono.Add currentCPF, 0
+                        dict13.Add currentCPF, 0
+                    End If
+                    
+                Case "RTRT"
+                    ' Verifica o índice do último valor útil, desconsiderando eventual elemento vazio gerado pelo pipe final
+                    lastIndex = UBound(campos)
+                    If Trim(campos(lastIndex)) = "" Then lastIndex = lastIndex - 1
+                    
+                    ' Soma todos os valores, exceto o último (que é o 13º Salário)
+                    If currentCPF <> "" Then
+                        For j = 1 To lastIndex - 1
+                            If IsNumeric(campos(j)) Then
+                                UpdateDictValue dict, currentCPF, 0, CDbl(campos(j)) / 100
+                            End If
+                        Next j
+                        ' O último valor útil corresponde ao 13º Salário
+                        If IsNumeric(campos(lastIndex)) Then
+                            dict13(currentCPF) = CDbl(campos(lastIndex)) / 100
+                        End If
+                    End If
+                    
+                Case "RTPO"
+                    ' Previdência Oficial
+                    If currentCPF <> "" Then
+                        For j = 1 To UBound(campos)
+                            If IsNumeric(campos(j)) Then
+                                UpdateDictValue dict, currentCPF, 1, CDbl(campos(j)) / 100
+                            End If
+                        Next j
+                    End If
+                    
+                Case "RTPP"
+                    ' Previdência Complementar ou Previdência Privada
+                    If currentCPF <> "" Then
+                        valor = 0
+                        For j = 1 To UBound(campos)
+                            If IsNumeric(campos(j)) Then valor = valor + CDbl(campos(j)) / 100
+                        Next j
+                        If flagInfpc Then
+                            ' Se a flag estiver ativa, acumula em Previdência Privada (índice 6)
+                            UpdateDictValue dict, currentCPF, 6, valor
+                            flagInfpc = False
+                        Else
+                            ' Caso contrário, armazena em Previdência Complementar (índice 2)
+                            UpdateDictValue dict, currentCPF, 2, valor
+                        End If
+                    End If
+                    
+                Case "RTDP"
+                    ' Dependentes ou Pensão
+                    If currentCPF <> "" Then
+                        For j = 1 To UBound(campos)
+                            If IsNumeric(campos(j)) Then
+                                UpdateDictValue dict, currentCPF, 3, CDbl(campos(j)) / 100
+                            End If
+                        Next j
+                    End If
+                    
+                Case "RTIRF"
+                    ' Imposto Retido
+                    If currentCPF <> "" Then
+                        For j = 1 To UBound(campos)
+                            If IsNumeric(campos(j)) Then
+                                UpdateDictValue dict, currentCPF, 5, CDbl(campos(j)) / 100
+                            End If
+                        Next j
+                    End If
+                    
+                Case "INFPC"
+                    ' Sinaliza que o próximo RTPP será Previdência Privada
+                    flagInfpc = True
+                    
+                Case "RIAP"
+                    ' RIAP contém os valores de Abono.
+                    ' Atualiza somente o Abono (utilizando, por exemplo, o campo 5 – 6º item)
+                    If currentCPF <> "" Then
+                        If UBound(campos) >= 5 And IsNumeric(campos(5)) Then
+                            dictAbono(currentCPF) = CDbl(campos(5)) / 100
+                        End If
+                    End If
+                    
+                Case "FIMDirf"
+                    Exit Do ' Encerra a leitura ao encontrar "FIMDirf"
+            End Select
+        End If
+    Loop
+    Close #1
+    
+    ' Exporta os dados para o Excel
+    linhaDIRF = dict.Count
+    ReDim dados(1 To linhaDIRF, 1 To 12)
+    i = 1
+    For Each chave In dict.Keys
+        ' Formata o CPF com o padrão ###.###.###-##
+        dados(i, 1) = FormatCPF(chave)
+        ' Preenche as 9 colunas do dicionário (colunas B a J)
+        For j = 0 To 8
+            dados(i, j + 2) = dict(chave)(j)
+        Next j
+        ' Coluna K: Abono; Coluna L: 13º Salário
+        dados(i, 11) = dictAbono(chave)
+        dados(i, 12) = dict13(chave)
+        i = i + 1
+    Next chave
+    
+    wsDIRF.Range("A2").Resize(linhaDIRF, 12).Value = dados
+    wsDIRF.Range("B2:L" & linhaDIRF + 1).NumberFormat = "#,##0.00"
+    
+    MsgBox "Importação concluída com sucesso!", vbInformation
+End Sub
+
+' === Função para atualizar os valores no Dictionary ===
+Sub UpdateDictValue(ByRef dict As Object, ByVal key As String, ByVal index As Integer, ByVal value As Double)
+    Dim tempArr As Variant
+    tempArr = dict(key)
+    tempArr(index) = tempArr(index) + value
+    dict(key) = tempArr
+End Sub
+
+' === Função para formatar o CPF no padrão ###.###.###-## ===
+Function FormatCPF(cpf As String) As String
+    Dim cpfFormatado As String
+    cpf = Trim(cpf)
+    If Len(cpf) = 11 Then
+        cpfFormatado = Mid(cpf, 1, 3) & "." & Mid(cpf, 4, 3) & "." & Mid(cpf, 7, 3) & "-" & Mid(cpf, 10, 2)
+    Else
+        cpfFormatado = cpf
+    End If
+    FormatCPF = cpfFormatado
+End Function
