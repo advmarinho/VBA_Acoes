@@ -1,0 +1,74 @@
+Sub ListaIRsSocial()
+    Dim wsOrigem As Worksheet, wsNova As Worksheet
+    Dim lastRow As Long, lastRowNova As Long
+    Dim rngFiltrado As Range
+    
+    ' Definir a planilha onde está rodando a macro (você pode ajustar, se quiser que seja outra)
+    Set wsOrigem = ActiveSheet
+    
+    ' 1) Copia a linha 4 para a linha 1
+    wsOrigem.Rows(4).Copy Destination:=wsOrigem.Rows(1)
+    
+    ' 2) Ajustes nos cabeçalhos (colunas H, C e K)
+    wsOrigem.Range("H1").Value = "Cadastro"
+    wsOrigem.Range("C1").Value = "Nomeado1"
+    wsOrigem.Range("D1").Value = "Nomeado2"
+    wsOrigem.Range("E1").Value = "Nomeado3"
+    wsOrigem.Range("F1").Value = "Nomeado4"
+    wsOrigem.Range("K1").Value = "Nomeado5"
+    
+    ' Preenche C1:F1 com o mesmo valor de C1
+    ' wsOrigem.Range("C1:F1").FillDown
+    
+    ' Define K1 como "Nomeado5"
+    ' wsOrigem.Range("K1").Value = "Nomeado5"
+    
+    ' 3) Aplicar filtro (usando detecção dinâmica da última linha na coluna A, por exemplo)
+    lastRow = wsOrigem.Cells(wsOrigem.Rows.Count, "A").End(xlUp).Row
+    
+    ' Se já houver filtro ativo, limpar antes de aplicar um novo
+    If wsOrigem.AutoFilterMode Then
+        wsOrigem.AutoFilterMode = False
+    End If
+    
+    ' Aplica o filtro no intervalo A1:K até a última linha
+    wsOrigem.Range("A1:K" & lastRow).AutoFilter Field:=9, _
+        Criteria1:="=56107", Operator:=xlOr, Criteria2:="=58806"
+    
+    ' 4) Copiar as células visíveis após o filtro
+    On Error Resume Next
+    Set rngFiltrado = wsOrigem.Range("A1:K" & lastRow).SpecialCells(xlCellTypeVisible)
+    On Error GoTo 0
+    
+    If rngFiltrado Is Nothing Then
+        MsgBox "Nenhum dado encontrado para os critérios de filtro (56107 ou 58806).", vbExclamation
+        Exit Sub
+    End If
+    
+    rngFiltrado.Copy
+    
+    ' 5) Criar nova planilha, nomeá-la e colar os dados
+    Set wsNova = Sheets.Add(After:=wsOrigem)
+    wsNova.Name = "eSocialTratado"
+    
+    wsNova.Range("A1").PasteSpecial Paste:=xlPasteAll
+    Application.CutCopyMode = False
+    
+    ' 6) Inserir a fórmula na coluna H (na linha 2, conforme seu código original)
+    wsNova.Range("H2").FormulaR1C1 = "=IFERROR(VALUE(IFERROR(TEXTAFTER(LEFT(RC[-1],SEARCH("" "",RC[-1]&"" "")-1),""/""),"""")),"""")"
+    
+    ' 7) Preencher essa fórmula até a última linha (com base na coluna G, por exemplo)
+    lastRowNova = wsNova.Cells(wsNova.Rows.Count, "G").End(xlUp).Row
+    If lastRowNova > 2 Then
+        wsNova.Range("H2:H" & lastRowNova).FillDown
+    End If
+    
+    ' (Opcional) Limpar o filtro na planilha de origem
+    If wsOrigem.AutoFilterMode Then
+        wsOrigem.AutoFilterMode = False
+    End If
+    
+    MsgBox "Processo concluído com sucesso!", vbInformation
+End Sub
+
+
