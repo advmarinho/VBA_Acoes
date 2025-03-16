@@ -1,0 +1,112 @@
+Sub EventosTratadosv1()
+    Dim wsOrig As Worksheet, wsTratado As Worksheet, wsNew As Worksheet
+    Dim lastRowTratado As Long, lastRowAfter As Long, lastRowDE As Long
+    Dim copyRange As Range
+    
+    ' Define a planilha original e copia para criar a planilha de trabalho
+    Set wsOrig = Sheets("Plan1")
+    wsOrig.Copy After:=Sheets(1)
+    Set wsTratado = ActiveSheet
+    wsTratado.Name = "EventosTratado"
+    
+    ' Determina a última linha com dados na planilha copiada (baseado na coluna A)
+    lastRowTratado = wsTratado.Cells(wsTratado.Rows.Count, "A").End(xlUp).Row
+    
+    ' Aplica AutoFilter na faixa A1:L{última linha}
+    wsTratado.Range("A1:L" & lastRowTratado).AutoFilter
+    
+    ' Filtra na coluna C (Field 3) pelo critério "HOSPITAL ALEMAO OSWALDO CRUZ"
+    wsTratado.Range("A1:L" & lastRowTratado).AutoFilter Field:=3, Criteria1:="HOSPITAL ALEMAO OSWALDO CRUZ"
+    
+    ' Remove o filtro do Field 3
+    wsTratado.Range("A1:L" & lastRowTratado).AutoFilter Field:=3
+    
+    ' Copia a linha 4 para a linha 1 (atualizando o cabeçalho)
+    wsTratado.Rows(4).Copy Destination:=wsTratado.Rows(1)
+    
+    ' Atualiza os cabeçalhos conforme necessário
+    With wsTratado
+        .Cells(1, "A").Value = "Cadastro"
+        .Cells(1, "C").Value = "Evento"
+        .Cells(1, "D").Value = "Desc.Evento"
+        .Cells(1, "E").Value = "Nomeado1"
+        .Cells(1, "I").Value = "Nomeado2"
+        .Cells(1, "L").Value = "Nomeado3"
+        .Cells(1, "K").Value = "Valor"
+    End With
+    
+    ' Aplica filtro na coluna B (Field 2) para selecionar células com "-"
+    wsTratado.Range("A1:L" & lastRowTratado).AutoFilter Field:=2, Criteria1:="-"
+    
+    ' Insere fórmulas em D5 e E5 e preenche até a última linha da planilha
+    wsTratado.Range("D5").FormulaR1C1 = "=RC[-3]"
+    wsTratado.Range("E5").FormulaR1C1 = "=RC[-2]"
+    wsTratado.Range("D5:E" & lastRowTratado).FillDown
+    
+    ' Remove o filtro (se houver)
+    If wsTratado.FilterMode Then wsTratado.ShowAllData
+    
+    ' Atualiza novamente os cabeçalhos nas células C1, D1 e E1
+    With wsTratado
+        .Cells(1, "C").Value = "Nomeado1"
+        .Cells(1, "D").Value = "Evento"
+        .Cells(1, "E").Value = "Desc.Evento"
+    End With
+    
+    ' Converte as fórmulas em valores nas colunas D:E
+    wsTratado.Range("D:E").Value = wsTratado.Range("D:E").Value
+    
+    ' Move o intervalo D5:E até a última linha preenchida, uma linha abaixo (colocando em D6)
+    lastRowDE = wsTratado.Cells(wsTratado.Rows.Count, "D").End(xlUp).Row
+    If wsTratado.Cells(wsTratado.Rows.Count, "E").End(xlUp).Row > lastRowDE Then
+        lastRowDE = wsTratado.Cells(wsTratado.Rows.Count, "E").End(xlUp).Row
+    End If
+    wsTratado.Range("D5:E" & lastRowDE).Cut Destination:=wsTratado.Range("D6")
+    
+    ' Limpa o conteúdo das colunas L a O
+    wsTratado.Range("L:O").ClearContents
+    
+    ' Reaplica AutoFilter na faixa A:K e filtra a coluna H (Field 8) com critério "=Pagamento" ou em branco
+    wsTratado.Range("A:K").AutoFilter
+    wsTratado.Range("A1:K" & wsTratado.Rows.Count).AutoFilter Field:=8, Criteria1:="Pagamento", Operator:=xlOr, Criteria2:="="
+    
+    ' Remove filtros
+    If wsTratado.FilterMode Then wsTratado.ShowAllData
+    
+    ' Aplica filtro na coluna B (Field 2) para selecionar células não vazias ("<>")
+    wsTratado.Range("A1:K" & wsTratado.Rows.Count).AutoFilter Field:=2, Criteria1:="<>"
+    ActiveSheet.Range("$A:$K").AutoFilter Field:=11, Criteria1:="<>Pág.:", Operator:=xlAnd, Criteria2:="<>"
+
+    
+    ' Copia os dados do intervalo com cabeçalho (A1:K até a última linha com dados)
+    lastRowAfter = wsTratado.Cells(wsTratado.Rows.Count, "A").End(xlUp).Row
+    Set copyRange = wsTratado.Range("A1:K" & lastRowAfter)
+    
+    '--- Parte final corrigida e dinamizada ---
+    ' Cria nova planilha e cola apenas os valores
+    Set wsNew = Sheets.Add(After:=Sheets(Sheets.Count))
+    wsNew.Name = "EventosTratado1"
+    copyRange.Copy
+    wsNew.Range("A1").PasteSpecial Paste:=xlPasteValues
+    Application.CutCopyMode = False
+    
+    ' Atualiza a última linha da nova planilha
+    Dim lastRowNew As Long
+    lastRowNew = wsNew.Cells(wsNew.Rows.Count, "A").End(xlUp).Row
+    
+    ' Preenche as células em branco nas colunas D e E com o valor da célula imediatamente acima
+    Dim cell As Range
+    For Each cell In wsNew.Range("D2:E" & lastRowNew)
+        If cell.Value = "" Then
+            cell.Value = cell.Offset(-1, 0).Value
+        End If
+    Next cell
+    
+    ' Formata a coluna G como data no formato mm/yyyy
+    wsNew.Columns("G:G").NumberFormat = "mm/yyyy"
+    ' Formata a coluna K com formato numérico
+    wsNew.Columns("K:K").NumberFormat = "#,##0.00"
+    
+    MsgBox "Processo concluído com sucesso!", vbInformation
+End Sub
+
