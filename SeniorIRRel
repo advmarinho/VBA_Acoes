@@ -1,0 +1,112 @@
+Sub ListaIRSenior()
+
+    ' ===============================
+    ' Parte 1: Preparação do Cabeçalho
+    ' ===============================
+    ' (Se quiser aproveitar algum dado da linha 8 antes de renomear as colunas,
+    '  mantenha a cópia. Caso não precise, você pode remover a parte de copiar a linha 8.)
+    
+    ' Copia a linha 8 para a linha 1 (opcional)
+    Rows("8:8").Copy Destination:=Rows("1:1")
+    
+    ' Preenche células em branco na linha 1 (colunas A até Q) com "nomeado"
+    Dim rngCabecalho As Range, rngBlanks As Range
+    Set rngCabecalho = Range("A1:Q1")
+    
+    On Error Resume Next
+    Set rngBlanks = rngCabecalho.SpecialCells(xlCellTypeBlanks)
+    On Error GoTo 0
+    
+    If Not rngBlanks Is Nothing Then
+        rngBlanks.Value = "nomeado"
+    End If
+    
+    ' Copia O1:P1 para P1 (deslocando conteúdo) e renomeia O1
+    Range("O1:P1").Copy Destination:=Range("P1")
+    Range("O1").Value = "nomeado1"
+    
+    ' Agora sobrescrevemos o cabeçalho com os nomes fixos desejados
+    Dim headers As Variant
+    headers = Array("Tipo", "Cadastro", "Colaborador", "nomeado", "Receita", "Data Pagto", _
+                    "Dep", "Tp", "Or", "Base Cálculo", "Original", "Recolhido", _
+                    "EFD-Reinf", "Rec", "nomeado1", "Data Recolh.", "Origem Retenção")
+    
+    Dim i As Long
+    For i = LBound(headers) To UBound(headers)
+        Cells(1, i + 1).Value = headers(i)
+    Next i
+    '=SEERRO(VALOR(SEERRO(TEXTODEPOIS(ESQUERDA(G5;LOCALIZAR(" ";G5&" ")-1);"/");""));"")
+    ' ===============================
+    ' Parte 2: Aplicação de Filtros, Cópia e Tratamento dos Dados
+    ' ===============================
+    ' Guarda a planilha atual (origem)
+    Dim origSheet As Worksheet
+    Set origSheet = ActiveSheet
+    
+    ' Descobre a última linha com dados (usando a coluna A como referência)
+    Dim lastRow As Long
+    lastRow = origSheet.Cells(origSheet.Rows.Count, "A").End(xlUp).Row
+    
+    ' Aplica filtro no intervalo A1:Q{lastRow}
+    ' Critério: "00/00/0000" na 16ª coluna (coluna P)
+    With origSheet
+        ' Limpa filtro prévio (caso exista)
+        If .AutoFilterMode Then .AutoFilterMode = False
+        
+        .Range("A1:Q" & lastRow).AutoFilter Field:=16, Criteria1:="00/00/0000"
+        
+        ' Define a área filtrada (células visíveis)
+        Dim copyRange As Range
+        On Error Resume Next
+        Set copyRange = .Range("A1:Q" & lastRow).SpecialCells(xlCellTypeVisible)
+        On Error GoTo 0
+        
+        If copyRange Is Nothing Then
+            MsgBox "Nenhum dado encontrado com o critério (00/00/0000) na coluna P."
+            Exit Sub
+        End If
+        
+        ' Copia as células visíveis
+        copyRange.Copy
+    End With
+    
+    ' Cria uma nova planilha e cola os dados filtrados como valores
+    Dim newSheet As Worksheet
+    Set newSheet = Sheets.Add(After:=origSheet)
+    newSheet.Name = "TratadoIRSenior"
+    newSheet.Range("A1").PasteSpecial Paste:=xlPasteValues
+    Application.CutCopyMode = False
+    
+    ' ===============================
+    ' Parte 3: Ajustes na nova Planilha
+    ' ===============================
+    ' Formata a coluna F como data
+    newSheet.Columns("F:F").NumberFormat = "m/d/yyyy"
+    
+    ' Converte dados na coluna K via TextToColumns
+    newSheet.Columns("K:K").TextToColumns Destination:=newSheet.Range("K1"), DataType:=xlDelimited, _
+        TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, _
+        Semicolon:=False, Comma:=False, Space:=False, Other:=False, _
+        FieldInfo:=Array(1, 1), TrailingMinusNumbers:=True
+    
+    ' Preenche células vazias (A até C) com o valor da célula superior
+    Dim newLastRow As Long
+    newLastRow = newSheet.Cells(newSheet.Rows.Count, "A").End(xlUp).Row
+    
+    Dim fillRange As Range
+    On Error Resume Next
+    Set fillRange = newSheet.Range("A1:C" & newLastRow).SpecialCells(xlCellTypeBlanks)
+    On Error GoTo 0
+    
+    If Not fillRange Is Nothing Then
+        fillRange.FormulaR1C1 = "=R[-1]C"
+    End If
+    
+    ' Remove o filtro na planilha original
+    origSheet.AutoFilterMode = False
+
+    MsgBox "Processo concluído com sucesso!", vbInformation
+
+End Sub
+
+
