@@ -1,0 +1,122 @@
+Option Explicit
+
+Sub ExplodirVerbasTurbo()
+    Dim fd As FileDialog
+    Dim filePath As String
+    Dim wbCSV As Workbook
+    Dim wbMacro As Workbook
+    Dim wsOrig As Worksheet
+    Dim wsDest As Worksheet
+    Dim lastRow As Long
+    Dim arr As Variant
+    Dim outArr() As Variant
+    Dim i As Long, j As Long, k As Long
+    Dim vet As Variant
+    Dim verba As String
+    
+    ' Desliga tudo para alta performance
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+    
+    Set wbMacro = ThisWorkbook
+    
+    '------------------------------------------------------------
+    ' 1) Selecionar CSV
+    '------------------------------------------------------------
+    Set fd = Application.FileDialog(msoFileDialogFilePicker)
+    With fd
+        .Title = "Selecione o arquivo CSV"
+        .AllowMultiSelect = False
+        .Filters.Clear
+        .Filters.Add "Arquivos CSV", "*.csv"
+        If .Show <> -1 Then Exit Sub
+        filePath = .SelectedItems(1)
+    End With
+    
+    ' Abre o CSV
+    Set wbCSV = Workbooks.Open(Filename:=filePath, Local:=True)
+    Set wsOrig = wbCSV.Worksheets(1)
+    
+    ' Última linha
+    lastRow = wsOrig.Cells(wsOrig.Rows.Count, "A").End(xlUp).Row
+    
+    ' Carrega tudo em memória (MUITO MAIS RÁPIDO)
+    arr = wsOrig.Range("A1:J" & lastRow).Value
+    
+    '------------------------------------------------------------
+    ' 2) Criar planilha destino
+    '------------------------------------------------------------
+    On Error Resume Next
+    Set wsDest = wbMacro.Worksheets("Verbas_Contabil")
+    On Error GoTo 0
+    
+    If wsDest Is Nothing Then
+        Set wsDest = wbMacro.Worksheets.Add
+        wsDest.Name = "Verbas_Contabil"
+    Else
+        wsDest.Cells.Clear
+    End If
+    
+    '------------------------------------------------------------
+    ' 3) Criar buffer para saída
+    '------------------------------------------------------------
+    ReDim outArr(1 To (lastRow * 15), 1 To 10)
+    k = 1
+    
+    ' Cabeçalho
+    outArr(k, 1) = "Razão Social"
+    outArr(k, 2) = "CNPJ"
+    outArr(k, 3) = "Código"
+    outArr(k, 4) = "Descrição"
+    outArr(k, 5) = "Data de Vigência"
+    outArr(k, 6) = "Descrição do Item"
+    outArr(k, 7) = "Conta/Subconta Devedora"
+    outArr(k, 8) = "Conta/Subconta Credora"
+    outArr(k, 9) = "Centro de Custo"
+    outArr(k, 10) = "Verba"
+    
+    k = k + 1
+    
+    '------------------------------------------------------------
+    ' 4) Processar tudo em memória
+    '------------------------------------------------------------
+    For i = 2 To UBound(arr, 1)
+        If Trim(arr(i, 10)) <> "" Then   ' col J
+            vet = Split(arr(i, 10), "+")
+            
+            For j = LBound(vet) To UBound(vet)
+                verba = Trim(vet(j))
+                If verba <> "" Then
+                    outArr(k, 1) = arr(i, 1)
+                    outArr(k, 2) = arr(i, 2)
+                    outArr(k, 3) = arr(i, 3)
+                    outArr(k, 4) = arr(i, 4)
+                    outArr(k, 5) = arr(i, 5)
+                    outArr(k, 6) = arr(i, 6)
+                    outArr(k, 7) = arr(i, 7)
+                    outArr(k, 8) = arr(i, 8)
+                    outArr(k, 9) = arr(i, 9)
+                    outArr(k, 10) = verba
+                    
+                    k = k + 1
+                End If
+            Next j
+        End If
+    Next i
+    
+    '------------------------------------------------------------
+    ' 5) Escrever tudo na planilha de uma vez (muito rápido)
+    '------------------------------------------------------------
+    wsDest.Range("A1").Resize(k - 1, 10).Value = outArr
+    
+    wsDest.Columns.AutoFit
+    wsDest.Rows(1).Font.Bold = True
+    
+    ' Reativa recursos
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    
+    MsgBox "Processo concluído em alta performance!", vbInformation
+End Sub
