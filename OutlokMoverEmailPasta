@@ -1,0 +1,366 @@
+Option Explicit
+
+Private Const ARQ_ULTIMA_PASTA As String = "C:\_RPA\AppMacro\_ultima_pasta.txt"
+
+Public Sub aSalvarEmailsBeneficios_PDFNomeManual()
+
+    Dim objItem As Object
+    Dim objMail As Outlook.MailItem
+
+    Dim xlApp As Object
+    Dim wb As Object
+    Dim ws As Object
+
+    Dim excelFilePath As String
+    Dim lastRow As Long
+
+    Dim senderEmail As String
+    Dim senderName As String
+    Dim emailDate As String
+    Dim subject As String
+
+    Dim classificationReason As String
+    Dim suggestedMatricula As String
+
+    Dim nomePDFBase As String
+    Dim pastaDestino As String
+    Dim arquivosSalvos As String
+    Dim qtdPDF As Long
+
+    excelFilePath = "C:\_RPA\AppMacro\_email_rh_vt.xlsx"
+
+    If Application.ActiveExplorer Is Nothing Then
+        MsgBox "Nenhum Explorer ativo.", vbExclamation
+        Exit Sub
+    End If
+
+    If Application.ActiveExplorer.Selection.Count = 0 Then
+        MsgBox "Selecione um e-mail.", vbExclamation
+        Exit Sub
+    End If
+
+    Set xlApp = CreateObject("Excel.Application")
+
+    xlApp.Visible = False
+    xlApp.DisplayAlerts = False
+
+    MkDirRec "C:\_RPA\AppMacro"
+
+    If Dir(excelFilePath) = "" Then
+
+        Set wb = xlApp.Workbooks.Add
+        Set ws = wb.Sheets(1)
+
+        GarantirCabecalhos ws
+
+        wb.SaveAs excelFilePath
+
+    Else
+
+        Set wb = xlApp.Workbooks.Open(excelFilePath)
+        Set ws = wb.Sheets(1)
+
+    End If
+
+    For Each objItem In Application.ActiveExplorer.Selection
+
+        If TypeOf objItem Is Outlook.MailItem Then
+
+            Set objMail = objItem
+
+            senderName = NzTexto(objMail.senderName)
+            senderEmail = GetSmtpAddress(objMail)
+
+            emailDate = Format(objMail.sentOn, "yyyy_mm_dd")
+            subject = objMail.subject
+
+            suggestedMatricula = FindMatricula(subject)
+
+            If suggestedMatricula = "" Then
+                suggestedMatricula = FindMatricula(objMail.Body)
+            End If
+
+            classificationReason = InputBox( _
+                "Digite a matrícula ou motivo." & vbCrLf & _
+                "Sugestão encontrada: " & suggestedMatricula, _
+                "Classificação", suggestedMatricula)
+
+            If Trim(classificationReason) = "" Then GoTo Proximo
+
+            nomePDFBase = InputBox( _
+                "Digite o nome do PDF." & vbCrLf & _
+                "Ex: ANTONIO SILVA_99999999999", _
+                "Nome PDF")
+
+            nomePDFBase = LimparNomeArquivoBase(nomePDFBase)
+
+            If nomePDFBase = "" Then GoTo Proximo
+
+            pastaDestino = EscolherPastaOffice()
+
+            If pastaDestino = "" Then GoTo Proximo
+
+            arquivosSalvos = ""
+
+            qtdPDF = SalvarPDFsDoEmail(objMail, pastaDestino, nomePDFBase, arquivosSalvos)
+
+            If qtdPDF = 0 Then
+                MsgBox "Nenhum PDF encontrado."
+                GoTo Proximo
+            End If
+
+            lastRow = ws.Cells(ws.Rows.Count, "A").End(-4162).Row + 1
+
+            ws.Cells(lastRow, 1).Value = subject
+            ws.Cells(lastRow, 2).Value = senderEmail
+            ws.Cells(lastRow, 3).Value = senderName
+            ws.Cells(lastRow, 4).Value = emailDate
+            ws.Cells(lastRow, 5).Value = classificationReason
+            ws.Cells(lastRow, 6).Value = nomePDFBase
+            ws.Cells(lastRow, 7).Value = pastaDestino
+            ws.Cells(lastRow, 8).Value = arquivosSalvos
+            ws.Cells(lastRow, 9).Value = Now
+
+            objMail.Move Application.Session.GetDefaultFolder(olFolderDeletedItems)
+
+        End If
+
+Proximo:
+
+    Next objItem
+
+    wb.Save
+    wb.Close False
+    xlApp.Quit
+
+    MsgBox "Processamento concluído."
+
+End Sub
+
+
+Private Function SalvarPDFsDoEmail(objMail As Outlook.MailItem, _
+pastaDestino As String, nomePDFBase As String, arquivosSalvos As String) As Long
+
+    Dim i As Long
+    Dim att As Outlook.attachment
+    Dim caminhoFinal As String
+    Dim nomeArquivo As String
+    Dim contador As Long
+
+    If Dir(pastaDestino, vbDirectory) = "" Then
+        MkDirRec pastaDestino
+    End If
+
+    For i = 1 To objMail.Attachments.Count
+
+        Set att = objMail.Attachments(i)
+
+        If LCase(Right(att.fileName, 4)) = ".pdf" Then
+
+            contador = contador + 1
+
+            If contador = 1 Then
+                nomeArquivo = nomePDFBase & ".pdf"
+            Else
+                nomeArquivo = nomePDFBase & "_" & contador & ".pdf"
+            End If
+
+            caminhoFinal = pastaDestino & "\" & nomeArquivo
+            caminhoFinal = GerarNomeUnico(caminhoFinal)
+
+            att.SaveAsFile caminhoFinal
+
+            arquivosSalvos = arquivosSalvos & caminhoFinal & " | "
+
+        End If
+
+    Next i
+
+    SalvarPDFsDoEmail = contador
+
+End Function
+
+
+Private Function EscolherPastaOffice() As String
+
+    Dim xlApp As Object
+    Dim fd As Object
+    Dim ultimaPasta As String
+
+    ultimaPasta = LerUltimaPasta()
+
+    Set xlApp = CreateObject("Excel.Application")
+    Set fd = xlApp.FileDialog(4)
+
+    With fd
+
+        .Title = "Selecione a pasta para salvar o PDF"
+        .AllowMultiSelect = False
+
+        If ultimaPasta <> "" Then
+            On Error Resume Next
+            .InitialFileName = ultimaPasta & "\"
+            On Error GoTo 0
+        End If
+
+        If .Show = -1 Then
+            EscolherPastaOffice = .SelectedItems(1)
+            SalvarUltimaPasta EscolherPastaOffice
+        End If
+
+    End With
+
+    xlApp.Quit
+
+End Function
+
+
+Private Function LerUltimaPasta() As String
+
+    Dim fso As Object
+    Dim ts As Object
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    If fso.FileExists(ARQ_ULTIMA_PASTA) Then
+        Set ts = fso.OpenTextFile(ARQ_ULTIMA_PASTA, 1)
+        LerUltimaPasta = ts.ReadLine
+        ts.Close
+    End If
+
+End Function
+
+
+Private Sub SalvarUltimaPasta(pasta As String)
+
+    Dim fso As Object
+    Dim ts As Object
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set ts = fso.CreateTextFile(ARQ_ULTIMA_PASTA, True)
+
+    ts.WriteLine pasta
+    ts.Close
+
+End Sub
+
+
+Private Function FindMatricula(texto As String) As String
+
+    Dim regex As Object
+
+    Set regex = CreateObject("VBScript.RegExp")
+
+    regex.Pattern = "\b\d{4,6}\b"
+    regex.Global = True
+
+    If regex.Test(texto) Then
+        FindMatricula = regex.Execute(texto)(0)
+    End If
+
+End Function
+
+
+Private Function GetSmtpAddress(mail As Outlook.MailItem) As String
+
+    Dim PR_SMTP_ADDRESS As String
+
+    PR_SMTP_ADDRESS = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E"
+
+    On Error Resume Next
+
+    If mail.SenderEmailType = "EX" Then
+        GetSmtpAddress = mail.Sender.PropertyAccessor.GetProperty(PR_SMTP_ADDRESS)
+    Else
+        GetSmtpAddress = mail.SenderEmailAddress
+    End If
+
+End Function
+
+
+Private Function LimparNomeArquivoBase(texto As String) As String
+
+    Dim invalidos
+    invalidos = Array("\", "/", ":", "*", "?", """", "<", ">", "|")
+
+    Dim i
+
+    For i = 0 To UBound(invalidos)
+        texto = Replace(texto, invalidos(i), "_")
+    Next i
+
+    LimparNomeArquivoBase = texto
+
+End Function
+
+
+Private Function GerarNomeUnico(caminho As String) As String
+
+    Dim base As String
+    Dim ext As String
+    Dim n As Long
+
+    If Dir(caminho) = "" Then
+        GerarNomeUnico = caminho
+        Exit Function
+    End If
+
+    base = Left(caminho, InStrRev(caminho, ".") - 1)
+    ext = Mid(caminho, InStrRev(caminho, "."))
+
+    n = 1
+
+    Do
+        caminho = base & "_" & n & ext
+        n = n + 1
+    Loop While Dir(caminho) <> ""
+
+    GerarNomeUnico = caminho
+
+End Function
+
+
+Private Sub MkDirRec(ByVal caminho As String)
+
+    Dim fso As Object
+
+    If caminho = "" Then Exit Sub
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    If Not fso.FolderExists(caminho) Then
+        fso.CreateFolder caminho
+    End If
+
+End Sub
+
+
+Private Function NzTexto(valor As Variant) As String
+
+    If IsNull(valor) Then
+        NzTexto = ""
+    Else
+        NzTexto = CStr(valor)
+    End If
+
+End Function
+
+
+Private Sub GarantirCabecalhos(ws As Object)
+
+    If ws.Cells(1, 1).Value = "" Then
+
+        ws.Cells(1, 1).Value = "Assunto"
+        ws.Cells(1, 2).Value = "Email"
+        ws.Cells(1, 3).Value = "Nome"
+        ws.Cells(1, 4).Value = "Data"
+        ws.Cells(1, 5).Value = "Classificacao"
+        ws.Cells(1, 6).Value = "NomePDF"
+        ws.Cells(1, 7).Value = "Pasta"
+        ws.Cells(1, 8).Value = "Arquivos"
+        ws.Cells(1, 9).Value = "DataProcessamento"
+
+    End If
+
+End Sub
+
